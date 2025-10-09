@@ -2,7 +2,7 @@ pipeline {
     agent any
     
     environment {
-        AWS_REGION = 'us-east-1'
+        AWS_REGION = 'ap-south-1'
         ECR_REPOSITORY = 'game-app'
         CLUSTER_NAME = 'game-cluster'
         SERVICE_NAME = 'game-service'
@@ -15,6 +15,27 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'main', url: 'https://github.com/Nayannyk/Game.git'
+            }
+        }
+        
+        stage('Terraform Plan and Create ECR') {
+            steps {
+                dir(TERRAFORM_DIR) {
+                    script {
+                        withCredentials([[
+                            $class: 'AmazonWebServicesCredentialsBinding',
+                            credentialsId: 'aws-creds',
+                            accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                            secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                        ]]) {
+                            sh """
+                                terraform init
+                                terraform plan -var="aws_region=${AWS_REGION}" -var="ecr_repository=${ECR_REPOSITORY}" -var="aws_account_id=${AWS_ACCOUNT_ID}"
+                                terraform apply -target=aws_ecr_repository.game_repo -var="aws_region=${AWS_REGION}" -var="ecr_repository=${ECR_REPOSITORY}" -var="aws_account_id=${AWS_ACCOUNT_ID}" -auto-approve
+                            """
+                        }
+                    }
+                }
             }
         }
         
@@ -50,7 +71,7 @@ pipeline {
             }
         }
         
-        stage('Terraform Apply') {
+        stage('Terraform Apply Full Infrastructure') {
             steps {
                 dir(TERRAFORM_DIR) {
                     script {
@@ -61,9 +82,7 @@ pipeline {
                             secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                         ]]) {
                             sh """
-                                terraform init
-                                terraform plan -var="ecr_image_tag=${DOCKER_IMAGE_TAG}" -var="aws_region=${AWS_REGION}" -var="ecr_repository=${ECR_REPOSITORY}"
-                                terraform apply -var="ecr_image_tag=${DOCKER_IMAGE_TAG}" -var="aws_region=${AWS_REGION}" -var="ecr_repository=${ECR_REPOSITORY}" -auto-approve
+                                terraform apply -var="ecr_image_tag=${DOCKER_IMAGE_TAG}" -var="aws_region=${AWS_REGION}" -var="ecr_repository=${ECR_REPOSITORY}" -var="aws_account_id=${AWS_ACCOUNT_ID}" -auto-approve
                             """
                         }
                     }
