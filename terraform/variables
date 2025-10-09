@@ -1,0 +1,17 @@
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+  default     = "ap-south-1"
+}
+
+variable "ecr_repository" {
+  description = "ECR repository name"
+  type        = string
+  default     = "game-app"
+}
+
+variable "ecr_image_tag" {
+  description = "Docker image tag"
+  type        = string
+  default     = "latest"
+}
