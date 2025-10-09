@@ -5,6 +5,8 @@ terraform {
       version = "~> 4.0"
     }
   }
+
+  required_version = ">= 1.0"
 }
 
 provider "aws" {
@@ -14,6 +16,10 @@ provider "aws" {
 # ECR Repository
 resource "aws_ecr_repository" "game_repo" {
   name = var.ecr_repository
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
 }
 
 # ECS Cluster
@@ -41,7 +47,21 @@ resource "aws_ecs_task_definition" "game_task" {
       hostPort      = 80
       protocol      = "tcp"
     }]
+    
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = "/ecs/game-app"
+        awslogs-region        = var.aws_region
+        awslogs-stream-prefix = "ecs"
+      }
+    }
   }])
+}
+
+# CloudWatch Log Group
+resource "aws_cloudwatch_log_group" "game_app" {
+  name = "/ecs/game-app"
 }
 
 # ECS Service
@@ -65,11 +85,15 @@ resource "aws_ecs_service" "game_service" {
   }
   
   depends_on = [aws_lb_listener.game_listener]
+  
+  tags = {
+    Environment = "production"
+  }
 }
 
 # IAM Role for ECS
 resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "ecs-task-execution-role"
+  name = "ecs-task-execution-role-game"
   
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -150,53 +174,17 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# NAT Gateway (optional for private subnets)
-resource "aws_eip" "nat" {
-  count = 2
-  domain = "vpc"
-}
-
-resource "aws_nat_gateway" "nat" {
-  count         = 2
-  allocation_id = element(aws_eip.nat.*.id, count.index)
-  subnet_id     = element(aws_subnet.public.*.id, count.index)
-  
-  tags = {
-    Name = "nat-gateway-${count.index + 1}"
-  }
-}
-
-resource "aws_route_table" "private" {
-  count  = 2
-  vpc_id = aws_vpc.main.id
-  
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = element(aws_nat_gateway.nat.*.id, count.index)
-  }
-  
-  tags = {
-    Name = "private-rt-${count.index + 1}"
-  }
-}
-
-resource "aws_route_table_association" "private" {
-  count          = 2
-  subnet_id      = element(aws_subnet.private.*.id, count.index)
-  route_table_id = element(aws_route_table.private.*.id, count.index)
-}
-
-# Security Group
+# Security Group for ECS Tasks
 resource "aws_security_group" "ecs_tasks" {
   name        = "ecs-tasks-sg"
-  description = "Allow HTTP traffic"
+  description = "Allow HTTP traffic from ALB"
   vpc_id      = aws_vpc.main.id
   
   ingress {
-    protocol    = "tcp"
-    from_port   = 80
-    to_port     = 80
-    cidr_blocks = ["0.0.0.0/0"]
+    protocol        = "tcp"
+    from_port       = 80
+    to_port         = 80
+    security_groups = [aws_security_group.alb_sg.id]
   }
   
   egress {
@@ -255,6 +243,7 @@ resource "aws_lb_target_group" "game_target" {
     timeout             = 5
     healthy_threshold   = 2
     unhealthy_threshold = 2
+    matcher             = "200"
   }
 }
 
@@ -278,4 +267,9 @@ output "load_balancer_dns" {
 
 output "ecr_repository_url" {
   value = aws_ecr_repository.game_repo.repository_url
+}
+
+output "service_url" {
+  description = "Full URL to access the game"
+  value       = "http://${aws_lb.game_alb.dns_name}/game.html"
 }
