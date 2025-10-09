@@ -15,3 +15,8 @@ variable "ecr_image_tag" {
   type        = string
   default     = "latest"
 }
+variable "aws_account_id" {
+  description = "Your AWS Account ID"
+  type        = string
+  default     = "127898337602"  # MANUAL ENTRY REQUIRED - Replace with your AWS Account ID
+}
