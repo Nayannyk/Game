@@ -8,6 +8,7 @@ pipeline {
         SERVICE_NAME = 'game-service'
         TERRAFORM_DIR = 'terraform'
         DOCKER_IMAGE_TAG = "${env.BUILD_ID}"
+        AWS_ACCOUNT_ID = '127898337602'
     }
     
     stages {
